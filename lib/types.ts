@@ -1,0 +1,119 @@
+// Session list entry from history.jsonl
+export interface SessionListEntry {
+  display: string
+  pastedContents: Record<string, unknown>
+  timestamp: number
+  project: string
+  sessionId: string
+}
+
+// Session with computed fields
+export interface Session {
+  sessionId: string
+  display: string
+  project: string
+  projectName: string
+  timestamp: number
+  date: Date
+  messageCount?: number
+}
+
+// Message types from session detail JSONL
+export type MessageType = 'user' | 'assistant' | 'system' | 'file-history-snapshot' | 'tool_use' | 'tool_result'
+
+export interface BaseMessage {
+  type: MessageType
+  timestamp?: string
+  uuid?: string
+  sessionId?: string
+}
+
+export interface UserMessage extends BaseMessage {
+  type: 'user'
+  role: 'user'
+  content: string | unknown
+  uuid: string
+  sessionId: string
+  cwd?: string
+  gitBranch?: string
+}
+
+export interface AssistantMessage extends BaseMessage {
+  type: 'assistant'
+  role: 'assistant'
+  content: string | unknown
+  uuid: string
+  sessionId: string
+}
+
+export interface SystemMessage extends BaseMessage {
+  type: 'system'
+  content: string
+}
+
+export interface FileHistorySnapshot extends BaseMessage {
+  type: 'file-history-snapshot'
+  messageId: string
+  snapshot: {
+    messageId: string
+    trackedFileBackups: Record<string, unknown>
+    timestamp: string
+  }
+  isSnapshotUpdate: boolean
+}
+
+export interface ToolUseMessage extends BaseMessage {
+  type: 'tool_use'
+  content: string | unknown
+  uuid: string
+  sessionId: string
+}
+
+export interface ToolResultMessage extends BaseMessage {
+  type: 'tool_result'
+  content: string | unknown
+  uuid: string
+  sessionId: string
+}
+
+export type Message = UserMessage | AssistantMessage | SystemMessage | FileHistorySnapshot | ToolUseMessage | ToolResultMessage
+
+// Full session detail
+export interface SessionDetail {
+  session: Session
+  messages: Message[]
+  projectPath: string
+}
+
+// Search result
+export interface SearchResult {
+  session: Session
+  matchedMessages: Array<{
+    message: Message
+    snippet: string
+    highlightRanges: Array<{ start: number; end: number }>
+  }>
+  relevanceScore: number
+}
+
+// Export formats
+export type ExportFormat = 'md' | 'json' | 'html'
+
+// API response types
+export interface SessionsResponse {
+  sessions: Session[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface SessionDetailResponse {
+  session: Session
+  messages: Message[]
+}
+
+export interface SearchResponse {
+  results: SearchResult[]
+  total: number
+  query: string
+}
