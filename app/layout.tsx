@@ -7,6 +7,11 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Claude Code History Viewer",
   description: "View and search your Claude Code conversation history",
+  icons: {
+    icon: '/icon.png',
+    shortcut: '/favicon.png',
+    apple: '/icon.png',
+  },
 }
 
 export default function RootLayout({
