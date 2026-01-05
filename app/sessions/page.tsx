@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { Search, Filter, MessageSquare, FolderOpen, Clock, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -19,6 +20,7 @@ interface Session {
 }
 
 export default function SessionsPage() {
+  const searchParams = useSearchParams()
   const [sessions, setSessions] = useState<Session[]>([])
   const [filteredSessions, setFilteredSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
@@ -29,6 +31,14 @@ export default function SessionsPage() {
   useEffect(() => {
     loadSessions()
   }, [])
+
+  // Set selectedProject from URL on mount and when sessions load
+  useEffect(() => {
+    const projectParam = searchParams.get('project')
+    if (projectParam && projects.length > 0) {
+      setSelectedProject(projectParam)
+    }
+  }, [searchParams, projects])
 
   useEffect(() => {
     filterSessions()
@@ -92,21 +102,10 @@ export default function SessionsPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input
-                type="search"
-                placeholder="Search conversations..."
-                className="pl-10"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 sm:w-64">
               <Filter className="h-4 w-4 text-slate-400" />
               <select
-                className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="h-10 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={selectedProject}
                 onChange={(e) => setSelectedProject(e.target.value)}
               >
@@ -117,6 +116,17 @@ export default function SessionsPage() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                type="search"
+                placeholder="Search conversations..."
+                className="pl-10"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
           </div>
         </div>
