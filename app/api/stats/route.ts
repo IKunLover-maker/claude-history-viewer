@@ -9,6 +9,10 @@ interface ProjectStats {
   totalSessions: number
   lastUpdate: number
   recentSessions: number
+  totalUserMessages: number
+  totalAssistantMessages: number
+  recentUserMessages: number
+  recentAssistantMessages: number
 }
 
 export interface DashboardStats {
@@ -66,7 +70,7 @@ export async function GET() {
       }
     }
 
-    // Aggregate by project
+    // Aggregate by project with message counts
     const projectMap = new Map<string, ProjectStats>()
 
     for (const session of sessions) {
@@ -78,6 +82,10 @@ export async function GET() {
           totalSessions: 0,
           lastUpdate: session.timestamp,
           recentSessions: 0,
+          totalUserMessages: 0,
+          totalAssistantMessages: 0,
+          recentUserMessages: 0,
+          recentAssistantMessages: 0,
         })
       }
       const stats = projectMap.get(key)!
@@ -88,11 +96,33 @@ export async function GET() {
       if (session.timestamp > stats.lastUpdate) {
         stats.lastUpdate = session.timestamp
       }
+
+      // Count messages for this session
+      try {
+        const detail = await loadSessionDetail(session.sessionId)
+        if (detail) {
+          for (const msg of detail.messages) {
+            const msgTime = msg.timestamp ? new Date(msg.timestamp).getTime() : 0
+            const isLastDay = msgTime > now - oneDayMs
+
+            if (msg.type === 'user') {
+              stats.totalUserMessages++
+              if (isLastDay) stats.recentUserMessages++
+            } else if (msg.type === 'assistant') {
+              stats.totalAssistantMessages++
+              if (isLastDay) stats.recentAssistantMessages++
+            }
+          }
+        }
+      } catch {
+        // Skip sessions that fail to load
+        continue
+      }
     }
 
-    // Sort by total sessions and take top 10
+    // Sort by last update time and take top 10
     const topProjects = Array.from(projectMap.values())
-      .sort((a, b) => b.totalSessions - a.totalSessions)
+      .sort((a, b) => b.lastUpdate - a.lastUpdate)
       .slice(0, 10)
 
     const response: DashboardStats = {

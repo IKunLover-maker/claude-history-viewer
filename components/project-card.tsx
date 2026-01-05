@@ -11,6 +11,10 @@ interface ProjectStats {
   totalSessions: number
   lastUpdate: number
   recentSessions: number
+  totalUserMessages: number
+  totalAssistantMessages: number
+  recentUserMessages: number
+  recentAssistantMessages: number
 }
 
 interface ProjectCardProps {
@@ -49,6 +53,30 @@ export function ProjectCard({ stats }: ProjectCardProps) {
             <span className={`font-semibold ${stats.recentSessions > 0 ? 'text-green-600 dark:text-green-400' : ''}`}>
               {stats.recentSessions}
             </span>
+          </div>
+
+          {/* Messages */}
+          <div className="pt-2 border-t space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Messages</span>
+              <span className="font-semibold">
+                {stats.totalUserMessages + stats.totalAssistantMessages}
+              </span>
+            </div>
+            <div className="flex gap-3 text-xs text-muted-foreground">
+              <span>User: {stats.totalUserMessages}</span>
+              <span>AI: {stats.totalAssistantMessages}</span>
+            </div>
+            {(stats.recentUserMessages > 0 || stats.recentAssistantMessages > 0) && (
+              <div className="flex gap-3 text-xs">
+                <span className="text-green-600 dark:text-green-400">
+                  Last 24h: User {stats.recentUserMessages}
+                </span>
+                <span className="text-green-600 dark:text-green-400">
+                  AI {stats.recentAssistantMessages}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Last update */}
