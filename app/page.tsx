@@ -6,6 +6,7 @@ import { MessageSquare, Search, BarChart3, Clock, Calendar, FolderOpen, Trending
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ProjectCard } from '@/components/project-card'
 import type { DashboardStats } from '@/app/api/stats/route'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
 export default function HomePage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
@@ -92,20 +93,27 @@ export default function HomePage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-sm text-muted-foreground">Sessions</span>
-                      <span className="text-2xl font-bold">{stats.lastDayCount}</span>
+                    {/* Main: Total messages */}
+                    <div className="text-center py-2">
+                      <div className="text-4xl font-bold text-slate-900 dark:text-slate-50">
+                        {stats.lastDayUserMessages + stats.lastDayAssistantMessages}
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-1">Messages</div>
                     </div>
-                    <div className="pt-2 border-t">
-                      <div className="flex items-center gap-4 text-xs">
+                    {/* User/AI breakdown + Sessions */}
+                    <div className="border-t pt-3 space-y-2">
+                      <div className="flex items-center justify-center gap-4 text-sm">
                         <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                          <User className="w-3 h-3" />
+                          <User className="w-4 h-4" />
                           {stats.lastDayUserMessages}
                         </span>
                         <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
-                          <Bot className="w-3 h-3" />
+                          <Bot className="w-4 h-4" />
                           {stats.lastDayAssistantMessages}
                         </span>
+                      </div>
+                      <div className="text-center text-xs text-muted-foreground">
+                        {stats.lastDayCount} sessions
                       </div>
                     </div>
                   </div>
@@ -120,8 +128,34 @@ export default function HomePage() {
                   <Calendar className="w-4 h-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">{stats.lastWeekCount}</div>
-                  <p className="text-xs text-muted-foreground mt-1">sessions</p>
+                  <div className="h-[140px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={stats.dailyMessageCounts}>
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fontSize: 11 }}
+                          stroke="hsl(var(--muted-foreground))"
+                        />
+                        <YAxis
+                          tick={{ fontSize: 11 }}
+                          stroke="hsl(var(--muted-foreground))"
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--background))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '6px',
+                          }}
+                          labelStyle={{ color: 'hsl(var(--foreground))' }}
+                        />
+                        <Bar
+                          dataKey="count"
+                          fill="hsl(var(--primary))"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -134,20 +168,27 @@ export default function HomePage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-sm text-muted-foreground">Sessions</span>
-                      <span className="text-2xl font-bold">{stats.totalSessions}</span>
+                    {/* Main: Total messages */}
+                    <div className="text-center py-2">
+                      <div className="text-4xl font-bold text-slate-900 dark:text-slate-50">
+                        {stats.totalUserMessages + stats.totalAssistantMessages}
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-1">Messages</div>
                     </div>
-                    <div className="pt-2 border-t">
-                      <div className="flex items-center gap-4 text-xs">
+                    {/* User/AI breakdown + Sessions */}
+                    <div className="border-t pt-3 space-y-2">
+                      <div className="flex items-center justify-center gap-4 text-sm">
                         <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                          <User className="w-3 h-3" />
+                          <User className="w-4 h-4" />
                           {stats.totalUserMessages}
                         </span>
                         <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
-                          <Bot className="w-3 h-3" />
+                          <Bot className="w-4 h-4" />
                           {stats.totalAssistantMessages}
                         </span>
+                      </div>
+                      <div className="text-center text-xs text-muted-foreground">
+                        {stats.totalSessions} sessions
                       </div>
                     </div>
                   </div>

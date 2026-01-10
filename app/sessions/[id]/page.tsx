@@ -23,6 +23,7 @@ import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { JsonViewer } from '@/components/json-viewer'
 import { ToolUseViewer, ThinkingViewer, ToolResultViewer } from '@/components/tool-viewer'
 import { ContentArrayRenderer } from '@/components/content-array-renderer'
+import { UserMessageRenderer } from '@/components/user-message-renderer'
 import type { Session, Message } from '@/lib/types'
 
 export default function SessionDetailPage({ params }: { params: { id: string } }) {
@@ -31,7 +32,10 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showScrollButton, setShowScrollButton] = useState<'top' | 'bottom' | 'both' | null>(null)
-  const [userMessages, setUserMessages] = useState<Array<{ uuid: string; index: number }>>([])
+  const [userMessages, setUserMessages] = useState<Array<{ uuid: string; timestamp: number }>>([])
+  const [toolStats, setToolStats] = useState<Map<string, number>>(new Map())
+  const [activeMessageUuid, setActiveMessageUuid] = useState<string | null>(null)
+  const [dotPositions, setDotPositions] = useState<Array<{ uuid: string; top: number }>>([])
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const [showRawMessage, setShowRawMessage] = useState<string | null>(null)
@@ -46,13 +50,57 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
 
   // Extract user messages for timeline
   useEffect(() => {
-    const users: Array<{ uuid: string; index: number }> = []
-    messages.forEach((msg, idx) => {
+    const users: Array<{ uuid: string; timestamp: number }> = []
+    messages.forEach((msg) => {
       if (msg.type === 'user') {
-        users.push({ uuid: msg.uuid, index: idx })
+        users.push({ uuid: msg.uuid, timestamp: msg.timestamp || Date.now() })
       }
     })
     setUserMessages(users)
+  }, [messages])
+
+  // Calculate tool usage statistics
+  useEffect(() => {
+    const stats = new Map<string, number>()
+
+    messages.forEach((msg) => {
+      // Inline version of getContentTypeInfo for tool_use detection
+      let parsedContent: unknown = msg.content
+      if (typeof msg.content === 'string') {
+        try {
+          if (msg.content.trim().startsWith('{') || msg.content.trim().startsWith('[')) {
+            parsedContent = JSON.parse(msg.content)
+          }
+        } catch {
+          // Not valid JSON, skip
+        }
+      }
+
+      // Handle array content
+      if (Array.isArray(parsedContent) && parsedContent.length > 0) {
+        const firstItem = parsedContent[0]
+        if (typeof firstItem === 'object' && firstItem !== null && 'type' in firstItem) {
+          const itemType = (firstItem as any).type
+          const itemName = (firstItem as any).name || null
+          if (itemType === 'tool_use' && itemName) {
+            const currentCount = stats.get(itemName) || 0
+            stats.set(itemName, currentCount + 1)
+          }
+        }
+      }
+
+      // Handle object content
+      if (typeof parsedContent === 'object' && parsedContent !== null && 'type' in parsedContent) {
+        const itemType = (parsedContent as any).type
+        const itemName = (parsedContent as any).name || null
+        if (itemType === 'tool_use' && itemName) {
+          const currentCount = stats.get(itemName) || 0
+          stats.set(itemName, currentCount + 1)
+        }
+      }
+    })
+
+    setToolStats(stats)
   }, [messages])
 
   // Handle scroll position detection
@@ -82,6 +130,84 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
     container.addEventListener('scroll', handleScroll)
     // Initial check
     handleScroll()
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+    }
+  }, [messages])
+
+  // Calculate dot positions based on message positions in the document
+  useEffect(() => {
+    if (messages.length === 0 || userMessages.length === 0) return
+
+    const calculatePositions = () => {
+      const container = scrollContainerRef.current
+      if (!container) return
+
+      const containerRect = container.getBoundingClientRect()
+      const scrollTop = container.scrollTop
+      const scrollHeight = container.scrollHeight - containerRect.height
+
+      const positions = userMessages.map((userMsg) => {
+        const element = messageRefs.current.get(userMsg.uuid)
+        if (!element) return { uuid: userMsg.uuid, top: 0 }
+
+        const elementRect = element.getBoundingClientRect()
+        const relativeTop = elementRect.top - containerRect.top + scrollTop
+        const topPercentage = (relativeTop / scrollHeight) * 100
+
+        return { uuid: userMsg.uuid, top: Math.max(0, Math.min(100, topPercentage)) }
+      })
+
+      setDotPositions(positions)
+    }
+
+    // Calculate after a short delay to ensure DOM is ready
+    const timeoutId = setTimeout(calculatePositions, 100)
+    // Also calculate on window resize
+    window.addEventListener('resize', calculatePositions)
+
+    return () => {
+      clearTimeout(timeoutId)
+      window.removeEventListener('resize', calculatePositions)
+    }
+  }, [messages, userMessages, messageRefs])
+
+  // Track currently visible message
+  useEffect(() => {
+    if (messages.length === 0) return
+
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      const containerRect = container.getBoundingClientRect()
+      const scrollTop = container.scrollTop
+      const scrollMiddle = scrollTop + containerRect.height / 2
+
+      // Find the message closest to the middle of the viewport
+      let closestMessage: { uuid: string; distance: number } | null = null
+
+      messageRefs.current.forEach((element, uuid) => {
+        const elementRect = element.getBoundingClientRect()
+        const elementMiddle = elementRect.top + scrollTop + elementRect.height / 2
+        const distance = Math.abs(elementMiddle - scrollMiddle)
+
+        if (!closestMessage || distance < closestMessage.distance) {
+          // Only consider user messages
+          if (messages.find(m => m.uuid === uuid)?.type === 'user') {
+            closestMessage = { uuid, distance }
+          }
+        }
+      })
+
+      if (closestMessage) {
+        setActiveMessageUuid(closestMessage.uuid)
+      }
+    }
+
+    container.addEventListener('scroll', handleScroll)
+    handleScroll() // Initial check
 
     return () => {
       container.removeEventListener('scroll', handleScroll)
@@ -138,6 +264,47 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
     window.open(`/api/sessions/${sessionId}/export?format=${format}`, '_blank')
   }
 
+  interface ContentTypeInfo {
+    type: string | null
+    name: string | null
+  }
+
+  function getContentTypeInfo(content: string | unknown): ContentTypeInfo {
+    let parsedContent: unknown = content
+
+    // Parse string content
+    if (typeof content === 'string') {
+      try {
+        if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
+          parsedContent = JSON.parse(content)
+        } else {
+          return { type: null, name: null }
+        }
+      } catch {
+        return { type: null, name: null }
+      }
+    }
+
+    // Handle array content - get first item's type
+    if (Array.isArray(parsedContent) && parsedContent.length > 0) {
+      const firstItem = parsedContent[0]
+      if (typeof firstItem === 'object' && firstItem !== null && 'type' in firstItem) {
+        const itemType = (firstItem as any).type
+        const itemName = (firstItem as any).name || null
+        return { type: itemType, name: itemName }
+      }
+    }
+
+    // Handle object content
+    if (typeof parsedContent === 'object' && parsedContent !== null && 'type' in parsedContent) {
+      const itemType = (parsedContent as any).type
+      const itemName = (parsedContent as any).name || null
+      return { type: itemType, name: itemName }
+    }
+
+    return { type: null, name: null }
+  }
+
   function renderContent(content: string | unknown): React.ReactNode {
     if (typeof content === 'string') {
       // Try to detect if this is JSON
@@ -178,6 +345,17 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
     return String(content ?? '')
   }
 
+  function formatDateTime(timestamp: number): string {
+    const date = new Date(timestamp)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    const seconds = String(date.getSeconds()).padStart(2, '0')
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+  }
+
   function renderMessage(msg: Message) {
     const isRaw = showRawMessage === msg.uuid
 
@@ -199,7 +377,7 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
               {msg.timestamp && (
                 <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {formatDistanceToNow(new Date(msg.timestamp), { addSuffix: true })}
+                  {formatDateTime(msg.timestamp)}
                 </span>
               )}
               <Button
@@ -225,13 +403,7 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
               </Button>
             </div>
             <div className="max-w-none rounded-lg bg-green-50/50 dark:bg-green-900/10 p-3">
-              {isRaw ? (
-                <pre className="bg-slate-100 dark:bg-slate-800 p-4 rounded text-xs whitespace-pre max-w-full overflow-x-auto">
-                  {typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content, null, 2)}
-                </pre>
-              ) : (
-                renderContent(msg.content)
-              )}
+              <UserMessageRenderer content={msg.content} isRaw={isRaw} />
             </div>
           </div>
         </div>
@@ -239,6 +411,8 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
     }
 
     if (msg.type === 'assistant') {
+      const contentInfo = getContentTypeInfo(msg.content)
+
       return (
         <div key={msg.uuid} className="flex gap-3 mb-6">
           <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
@@ -246,11 +420,18 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Claude</span>
+              {contentInfo.type === 'tool_use' && contentInfo.name ? (
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                  {contentInfo.name}
+                </span>
+              ) : contentInfo.type ? (
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{contentInfo.type}</span>
+              ) : null}
               {msg.timestamp && (
                 <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {formatDistanceToNow(new Date(msg.timestamp), { addSuffix: true })}
+                  {formatDateTime(msg.timestamp)}
                 </span>
               )}
               <Button
@@ -290,6 +471,8 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
     }
 
     if (msg.type === 'tool_use') {
+      const contentInfo = getContentTypeInfo(msg.content)
+
       return (
         <div
           key={msg.uuid}
@@ -303,11 +486,18 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Tool Use</span>
+              {contentInfo.type === 'tool_use' && contentInfo.name ? (
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                  {contentInfo.name}
+                </span>
+              ) : contentInfo.type ? (
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{contentInfo.type}</span>
+              ) : null}
               {msg.timestamp && (
                 <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {formatDistanceToNow(new Date(msg.timestamp), { addSuffix: true })}
+                  {formatDateTime(msg.timestamp)}
                 </span>
               )}
               <Button
@@ -347,6 +537,8 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
     }
 
     if (msg.type === 'tool_result') {
+      const contentInfo = getContentTypeInfo(msg.content)
+
       return (
         <div
           key={msg.uuid}
@@ -360,11 +552,15 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Tool Result</span>
+              {contentInfo.type ? (
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{contentInfo.type}</span>
+              ) : (
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{msg.type}</span>
+              )}
               {msg.timestamp && (
                 <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {formatDistanceToNow(new Date(msg.timestamp), { addSuffix: true })}
+                  {formatDateTime(msg.timestamp)}
                 </span>
               )}
               <Button
@@ -435,8 +631,8 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
+    <div className="h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden">
+      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shrink-0">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -464,34 +660,37 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
         </div>
       </header>
 
-      <div className="flex justify-center">
-        {/* Left Timeline */}
-        <aside className="w-16 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 sticky top-[73px] h-[calc(100vh-73px)] overflow-y-auto bg-white dark:bg-slate-900">
-          <div className="py-4 flex flex-col items-center gap-4">
-            {userMessages.map((userMsg, idx) => (
-              <button
-                key={userMsg.uuid}
-                onClick={() => scrollToMessage(userMsg.uuid)}
-                className="group relative"
-                title={`User message ${idx + 1}`}
-              >
-                <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors">
-                  <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 dark:bg-slate-700 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                  User message {idx + 1}
-                </div>
-              </button>
-            ))}
+      {/* Tool Usage Statistics */}
+      {toolStats.size > 0 && (
+        <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+          <div className="container mx-auto px-4 py-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Tools used:</span>
+              {Array.from(toolStats.entries())
+                .sort(([, a], [, b]) => b - a)
+                .map(([toolName, count]) => (
+                  <span
+                    key={toolName}
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 rounded-md text-xs font-medium"
+                  >
+                    <Zap className="w-3 h-3" />
+                    {toolName}
+                    <span className="text-amber-500 dark:text-amber-500">×{count}</span>
+                  </span>
+                ))}
+            </div>
           </div>
-        </aside>
+        </div>
+      )}
 
-        {/* Main Content */}
-        <main
-          ref={scrollContainerRef}
-          className="px-4 py-8 max-w-4xl overflow-y-auto w-full"
-          style={{ maxHeight: 'calc(100vh - 73px)' }}
-        >
+      <div className="flex justify-center">
+        <div className="relative max-w-4xl w-full">
+          {/* Main Content */}
+          <main
+            ref={scrollContainerRef}
+            className="px-4 py-8 overflow-y-auto w-full"
+            style={{ maxHeight: 'calc(100vh - 73px)' }}
+          >
           <Card>
             <CardContent className="p-6">
               {messages.length === 0 ? (
@@ -504,6 +703,45 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
             </CardContent>
           </Card>
         </main>
+
+          {/* Right-side Navigation Dots - positioned relative to main */}
+          {dotPositions.length > 0 && (
+            <aside
+              className="absolute top-0 pointer-events-none"
+              style={{
+                right: '-20px',
+                height: 'calc(100vh - 73px)'
+              }}
+            >
+              <div className="pointer-events-auto py-2 h-full relative">
+                {/* Connecting line */}
+                <div className="absolute left-1/2 top-2 bottom-2 w-px bg-slate-200 dark:bg-slate-700 -translate-x-1/2" />
+                <div className="flex flex-col gap-1 px-1 justify-between h-full relative">
+                {dotPositions.map((dot) => {
+                  const isActive = dot.uuid === activeMessageUuid
+
+                  return (
+                    <button
+                      key={dot.uuid}
+                      onClick={() => scrollToMessage(dot.uuid)}
+                      className="flex-shrink-0"
+                      style={{ top: `${dot.top}%` }}
+                    >
+                      <div
+                        className={`w-2 h-2 rounded-full transition-all ${
+                          isActive
+                            ? 'bg-blue-600 dark:bg-blue-400 scale-125'
+                            : 'bg-slate-400 dark:bg-slate-500 hover:bg-slate-500 dark:hover:bg-slate-400'
+                        }`}
+                      />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </aside>
+        )}
+        </div>
       </div>
 
       {/* Floating scroll buttons */}

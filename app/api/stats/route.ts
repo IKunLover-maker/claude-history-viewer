@@ -15,6 +15,11 @@ interface ProjectStats {
   recentAssistantMessages: number
 }
 
+export interface DailyMessageCount {
+  date: string
+  count: number
+}
+
 export interface DashboardStats {
   lastDayCount: number
   lastWeekCount: number
@@ -24,6 +29,7 @@ export interface DashboardStats {
   lastDayUserMessages: number
   lastDayAssistantMessages: number
   topProjects: ProjectStats[]
+  dailyMessageCounts: DailyMessageCount[]
 }
 
 export async function GET() {
@@ -125,6 +131,43 @@ export async function GET() {
       .sort((a, b) => b.lastUpdate - a.lastUpdate)
       .slice(0, 10)
 
+    // Calculate daily message counts for the last 7 days
+    const dailyMessageCounts: DailyMessageCount[] = []
+    for (let i = 6; i >= 0; i--) {
+      const dayStart = new Date()
+      dayStart.setHours(0, 0, 0, 0)
+      dayStart.setDate(dayStart.getDate() - i)
+      const dayEnd = new Date(dayStart)
+      dayEnd.setDate(dayEnd.getDate() + 1)
+
+      const dayStartMs = dayStart.getTime()
+      const dayEndMs = dayEnd.getTime()
+
+      // Count messages from sessions that fall within this day
+      let dayMessageCount = 0
+      const daySessions = sessions.filter(
+        s => s.timestamp >= dayStartMs && s.timestamp < dayEndMs
+      )
+
+      for (const session of daySessions) {
+        try {
+          const detail = await loadSessionDetail(session.sessionId)
+          if (detail) {
+            dayMessageCount += detail.messages.filter(
+              m => m.type === 'user' || m.type === 'assistant'
+            ).length
+          }
+        } catch {
+          continue
+        }
+      }
+
+      dailyMessageCounts.push({
+        date: dayStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        count: dayMessageCount,
+      })
+    }
+
     const response: DashboardStats = {
       lastDayCount,
       lastWeekCount,
@@ -134,6 +177,7 @@ export async function GET() {
       lastDayUserMessages,
       lastDayAssistantMessages,
       topProjects,
+      dailyMessageCounts,
     }
 
     return NextResponse.json(response)
