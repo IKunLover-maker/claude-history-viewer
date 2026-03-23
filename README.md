@@ -14,6 +14,12 @@
 
 ## 🎯 功能特性
 
+### 🌍 中英文切换
+
+- 支持简体中文和英文两种语言
+- 自动检测浏览器语言首次访问
+- 记住用户语言偏好
+
 ### 📊 数据仪表盘
 
 ![Dashboard](docs/static/dashboard.png)
@@ -27,7 +33,8 @@
 ![Session List](docs/static/session-list.png)
 
 - 浏览所有对话历史，按时间和项目筛选
-- 快速预览会话信息
+- 快速预览会话信息、文件大小和消息数量
+- 支持批量选择和删除会话
 - 一键导出会话数据
 
 ### 💬 会话详情
@@ -35,6 +42,7 @@
 ![Session Detail](docs/static/session-detail.png)
 
 - 查看完整对话内容，包括用户消息、AI 回复和工具调用
+- 使用虚拟滚动技术，流畅处理长对话（数百条消息）
 - 快速导航到消息位置
 - 查看原始消息或渲染后的内容
 - 支持 Markdown 语法高亮
@@ -67,6 +75,7 @@
 - **date-fns** - 日期格式化
 - **Lucide React** - 图标库
 - **Recharts** - 数据可视化
+- **@tanstack/react-virtual** - 虚拟滚动
 
 ## 📦 安装
 
@@ -121,15 +130,19 @@ claude-history-viewer/
 │   ├── search/page.tsx         # 搜索页面
 │   ├── page.tsx                # 首页仪表盘
 │   ├── layout.tsx              # 根布局
+│   ├── providers.tsx            # 客户端 Providers
 │   └── globals.css             # 全局样式
 ├── components/
 │   ├── ui/                     # shadcn/ui 组件
+│   ├── language-switcher.tsx    # 语言切换组件
 │   ├── markdown-renderer.tsx   # Markdown 渲染器
 │   ├── json-viewer.tsx         # JSON 查看器
 │   ├── tool-viewer.tsx         # 工具调用查看器
 │   └── user-message-renderer.tsx  # 用户消息渲染器
 ├── lib/
 │   ├── claude-history.ts       # Claude 历史数据解析
+│   ├── i18n.tsx              # 国际化上下文
+│   ├── translations.ts         # 翻译词条
 │   ├── xml-utils.ts            # XML 解析工具
 │   ├── types.ts                # 类型定义
 │   └── utils.ts                # 工具函数
@@ -138,7 +151,8 @@ claude-history-viewer/
 │       ├── dashboard.png
 │       ├── session-list.png
 │       └── session-detail.png
-└── package.json
+├── package.json
+└── updateLog.md               # 更新日志
 ```
 
 ## 🎨 使用场景
@@ -165,13 +179,17 @@ claude-history-viewer/
 - 分享团队知识
 
 ## 🚧 后续扩展
+
 - [ ] 支持其他AI Coding工具如Trae、CodeX等
-- [ ] 添加用户认证（NextAuth.js）
 - [ ] 支持多用户和团队共享
 - [ ] 添加标签和收藏功能
 - [ ] 实时监控新对话
 - [ ] 部署到 Vercel/自托管服务器
 - [ ] 支持自定义数据源
+
+## 📝 更新日志
+
+详见 [updateLog.md](updateLog.md)
 
 ## 📄 许可证
 
